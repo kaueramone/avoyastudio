@@ -26,7 +26,7 @@ export async function createCaptcha(config,selector,onReady,onError) {
   let token='',widget;
   const container=document.querySelector(selector);
   if(!captchaScript)captchaScript=new Promise((resolve,reject)=>{
-    if(window.turnstile){resolve();return;}
+    if(typeof window.turnstile?.render==='function'){resolve();return;}
     const script=document.createElement('script');
     script.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';script.async=true;
     script.onload=resolve;script.onerror=()=>{captchaScript=undefined;reject(new Error('Captcha unavailable'));};document.head.append(script);
