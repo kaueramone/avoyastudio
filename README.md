@@ -69,3 +69,8 @@ Fontes: https://www.ctt.pt/particulares/enviar/para-o-estrangeiro/encomenda-post
 
 
 A verificação privada `GET ?action=readiness` aceita apenas a credencial de servidor no testador de funções do Supabase. Consulta a conta e o webhook na Stripe com a chave configurada e devolve apenas indicadores de estado. Não cria sessões, encomendas ou cobranças e não devolve segredos nem dados pessoais.
+
+
+## Validacao Stripe em producao — 9/11/2026
+
+Os dois segredos Stripe foram introduzidos pelo utilizador no Supabase. O hash do segredo do webhook foi comparado com o destino de producao e coincide. A consulta privada ao servidor respondeu HTTP 200 com stripe_authenticated, account_matches, charges_enabled, payouts_enabled e webhook_active verdadeiros, key_mode live. A configuracao foi alterada para CHECKOUT_MODE=live e ALLOW_LIVE_PAYMENTS=true; o endpoint publico confirmou enabled=true e is_test=false. Nao foi criada nenhuma encomenda, sessao de checkout ou cobranca nesta validacao. O catalogo continua ilustrativo e o registo publico de clientes aguarda SMTP.
