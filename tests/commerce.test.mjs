@@ -106,3 +106,9 @@ test('readiness is private and makes only read-only Stripe calls',async t=>{
  assert.equal((await s.handler(request('valid-token'))).status,403);
  const result=await s.handler(request('fixture'));assert.equal(result.status,200);const data=await result.json();assert.equal(data.stripe_authenticated,true);assert.equal(data.key_mode,'live');assert.equal(data.account_matches,true);assert.equal(data.webhook_active,true);assert.equal(data.checkout_enabled,false);assert.equal(s.orders.length,0);assert.equal(s.stripeBodies.length,0);
 });
+
+test('readiness also accepts the Supabase dashboard secret-key header',async t=>{
+ const s=await fixture(t,{SUPABASE_SECRET_KEYS:JSON.stringify({default:'sb_secret_fixture'})});
+ const request=key=>new Request('https://fixture.invalid/functions/v1/commerce?action=readiness',{headers:{apikey:key}});
+ assert.equal((await s.handler(request('sb_publishable_fixture'))).status,403);assert.equal((await s.handler(request('sb_secret_fixture'))).status,200);assert.equal(s.orders.length,0);
+});

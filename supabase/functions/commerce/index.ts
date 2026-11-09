@@ -98,7 +98,9 @@ async function webhook(req:Request){
 // Supabase function tester. It never creates orders, sessions or payments.
 async function readiness(req:Request){
   const serviceKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if(!serviceKey||req.headers.get('Authorization')!==`Bearer ${serviceKey}`)throw new RequestError(403,'forbidden','Acesso reservado ao servidor.');
+  const secretKeys=JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS')||'{}');
+  const authorized=(Boolean(serviceKey)&&req.headers.get('Authorization')===`Bearer ${serviceKey}`)||Object.values(secretKeys).some(value=>typeof value==='string'&&value.length>0&&req.headers.get('apikey')===value);
+  if(!authorized)throw new RequestError(403,'forbidden','Acesso reservado ao servidor.');
   const account=await stripe('accounts/acct_1UZsoCGemINO4zER');
   const destination=await stripe('webhook_endpoints/we_1UZtZaGemINO4zERVG2tvOwZ');
   return {stripe_authenticated:true,key_mode:/^(sk|rk)_live_/.test(stripeKey)?'live':/^(sk|rk)_test_/.test(stripeKey)?'test':'unknown',account_matches:account.id==='acct_1UZsoCGemINO4zER',charges_enabled:account.charges_enabled===true,payouts_enabled:account.payouts_enabled===true,webhook_active:destination.status==='enabled'&&destination.livemode===true&&destination.url===`${url}/functions/v1/commerce?action=webhook`,checkout_enabled:enabled};
