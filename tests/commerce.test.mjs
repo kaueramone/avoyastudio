@@ -10,7 +10,7 @@ const orderId='33333333-3333-4333-8333-333333333333';
 const userId='11111111-1111-4111-8111-111111111111';
 const origin='https://avoyastudio.com';
 async function fixture(t,env={}){
-  const state={orders:[],events:[],updates:[],stripeBodies:[],user:{id:userId,email:'buyer@example.invalid',email_confirmed_at:'2026-11-09T12:00:00Z'}};
+  const state={rules:{id:'shop',origin_postcode:'5340-262',portugal_cents:500,europe_cents:3970,brazil_cents:4750,eur_brl:6.1449,max_weight_g:1000,rate_date:'2026-11-06'},orders:[],events:[],updates:[],stripeBodies:[],user:{id:userId,email:'buyer@example.invalid',email_confirmed_at:'2026-11-09T12:00:00Z'}};
   function table(name){
     const filters=[];let operation='select',values;
     const query={
@@ -19,7 +19,7 @@ async function fixture(t,env={}){
       single(){return run(true);},maybeSingle(){return run(true);},then(resolve,reject){return run(false).then(resolve,reject);}
     };
     async function run(single){
-      let rows=name==='products'?[{id:'vela',name:'Uma vela',price:26,status:'published'}]:name==='orders'?state.orders:state.events;
+      let rows=name==='commerce_settings'?[state.rules]:name==='products'?[{id:'vela',name:'Uma vela',price:26,status:'published',packed_weight_g:400}]:name==='orders'?state.orders:state.events;
       if(operation==='insert'){const row={id:orderId,status:'pending',payment_status:'unpaid',refunded_cents:0,...values};rows.push(row);return {data:row,error:null};}
       if(operation==='upsert'){if(!rows.some(row=>row.id===values.id))rows.push(values);return {data:null,error:null};}
       rows=rows.filter(row=>filters.every(match=>match(row)));
@@ -41,7 +41,7 @@ async function fixture(t,env={}){
     const signature=createHmac('sha256','whsec_fixture').update(`${timestamp}.${raw}`).digest('hex');
     return new Request('https://fixture.invalid/functions/v1/commerce?action=webhook',{method:'POST',headers:{'stripe-signature':signed?`t=${timestamp},v1=${signature}`:'t=0,v1=wrong'},body:raw});
   };
-  state.seedOrder=()=>state.orders.push({id:orderId,stripe_session_id:'cs_test_fixture',user_id:userId,total_cents:3100,is_test:true,payment_status:'unpaid',status:'pending',refunded_cents:0});
+  state.seedOrder=()=>state.orders.push({id:orderId,stripe_session_id:'cs_test_fixture',user_id:userId,total_cents:3100,currency:'eur',destination_country:'PT',language:'pt',is_test:true,payment_status:'unpaid',status:'pending',refunded_cents:0});
   state.session=(extra={})=>({id:'cs_test_fixture',metadata:{avoya_order:orderId},amount_total:3100,currency:'eur',livemode:false,payment_status:'paid',payment_intent:'pi_fixture',...extra});
   return state;
 }
@@ -71,4 +71,31 @@ test('an unpaid completed session remains processing until Stripe confirms payme
 });
 test('verified payment confirmation is idempotent',async t=>{
   const s=await fixture(t);s.seedOrder();assert.equal((await s.handler(s.webhook(s.session()))).status,200);assert.equal((await s.handler(s.webhook(s.session()))).status,200);assert.equal(s.orders[0].payment_status,'paid');assert.equal(s.orders[0].status,'confirmed');assert.equal(s.updates.length,1);assert.equal(s.events.length,1);
+});
+
+
+test('Brazil checkout converts trusted prices and postage to BRL and locks destination',async t=>{
+ const s=await fixture(t);const response=await s.handler(s.request({checkout_key:randomUUID(),country:'BR',currency:'brl',language:'es',items:[{id:'vela',quantity:1}],shipping_cents:0,eur_brl:1}));assert.equal(response.status,200);
+ assert.equal(s.orders[0].subtotal_cents,15977);assert.equal(s.orders[0].shipping_cents,29188);assert.equal(s.orders[0].currency,'brl');
+ assert.equal(s.stripeBodies[0].get('shipping_address_collection[allowed_countries][0]'),'BR');assert.equal(s.stripeBodies[0].get('line_items[0][price_data][currency]'),'brl');assert.equal(s.stripeBodies[0].get('locale'),'es');
+});
+test('unsupported destinations and overweight orders never create a payment',async t=>{
+ const s=await fixture(t);
+ assert.equal((await s.handler(s.request({checkout_key:randomUUID(),country:'US',items:[{id:'vela',quantity:1}]}))).status,400);
+ assert.equal((await s.handler(s.request({checkout_key:randomUUID(),items:[{id:'vela',quantity:3}]}))).status,409);
+ assert.equal(s.orders.length,0);assert.equal(s.stripeBodies.length,0);
+});
+test('checkout key cannot be reused with a cheaper destination or different currency',async t=>{
+ const s=await fixture(t),key=randomUUID();const data={checkout_key:key,items:[{id:'vela',quantity:1}],country:'BR',currency:'brl'};
+ assert.equal((await s.handler(s.request(data))).status,200);assert.equal((await s.handler(s.request({...data,country:'PT',currency:'eur'}))).status,409);
+});
+test('BRL webhook must match the order currency',async t=>{
+ const s=await fixture(t);s.seedOrder();s.orders[0].currency='brl';assert.equal((await s.handler(s.webhook(s.session()))).status,500);assert.equal(s.orders[0].payment_status,'unpaid');
+ assert.equal((await s.handler(s.webhook(s.session({currency:'brl'})))).status,200);assert.equal(s.orders[0].payment_status,'paid');
+});
+
+test('a verified refund arriving before checkout confirmation cannot be overwritten as paid',async t=>{
+ const s=await fixture(t);s.seedOrder();const refund={id:'ch_fixture',metadata:{avoya_order:orderId},payment_intent:'pi_fixture',amount:3100,amount_refunded:3100,currency:'eur',livemode:false};
+ assert.equal((await s.handler(s.webhook(refund,'charge.refunded'))).status,200);assert.equal(s.orders[0].payment_status,'refunded');assert.equal(s.orders[0].status,'cancelled');s.events.length=0;
+ assert.equal((await s.handler(s.webhook(s.session()))).status,200);assert.equal(s.orders[0].payment_status,'refunded');assert.equal(s.orders[0].refunded_cents,3100);
 });

@@ -1,3 +1,5 @@
+import { language } from './i18n.mjs';
+import { configureShipping } from './commerce.mjs';
 import { products } from './catalogue.mjs';
 import { defaultContent, validImage } from './content.mjs';
 export async function getPublicConfig() {
@@ -10,6 +12,7 @@ export async function loadStore() {
   try { config = await getPublicConfig(); } catch { return { content: defaultContent, available: true }; }
   if (!config.supabaseUrl || !config.supabaseKey) return { content: defaultContent, available: true };
   const headers = { apikey: config.supabaseKey };
+  try {const r=await fetch(`${config.supabaseUrl}/rest/v1/commerce_settings?select=*&id=eq.shop`,{headers,signal:AbortSignal.timeout(6000)});if(r.ok)configureShipping((await r.json())[0]);}catch{}
   try {
     const responses = await Promise.all([
       fetch(`${config.supabaseUrl}/rest/v1/products?select=*&status=eq.published&order=sort_order.asc,created_at.asc`,{ headers, signal: AbortSignal.timeout(8000) }),
@@ -17,7 +20,7 @@ export async function loadStore() {
     ]);
     if (responses.some(r => !r.ok)) throw new Error('Store unavailable');
     const [rows, pages] = await Promise.all(responses.map(r => r.json()));
-    products.splice(0, products.length, ...rows.map(p => ({ ...p, price: Number(p.price), image: validImage(p.image, config.supabaseUrl) ? p.image : 'assets/hero.webp' })));
+    products.splice(0, products.length, ...rows.map(p => ({ ...p, ...Object.fromEntries(Object.entries(p.translations?.[language]||{}).filter(([key,value])=>['name','subtitle','notes','mood','description'].includes(key)&&typeof value==='string')), price: Number(p.price), image: validImage(p.image, config.supabaseUrl) ? p.image : 'assets/hero.webp' })));
     return { content: { ...defaultContent, ...(pages[0]?.data || {}) }, available: true, config };
   } catch {
     products.splice(0, products.length);
@@ -29,6 +32,7 @@ function setText(selector, text) {
   target.replaceChildren(...text.split('\n').flatMap((line, i) => i ? [document.createElement('br'), document.createTextNode(line)] : [document.createTextNode(line)]));
 }
 export function applyContent(content, config = {}) {
+  content={...content,...Object.fromEntries(Object.entries(content.translations?.[language]||{}).filter(([key,value])=>typeof value==='string'&&!['heroImage','originImage','storyImage'].includes(key)))};
   const fields = {
     '.announcement':'announcement', '.hero-copy .eyebrow':'heroEyebrow', '.hero h1':'heroTitle', '.hero-description':'heroDescription',
     '#origin-title':'originTitle', '.origin-copy p:nth-of-type(2)':'originP1', '.origin-copy p:nth-of-type(3)':'originP2',

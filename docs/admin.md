@@ -35,3 +35,10 @@ O build agora exige `npm ci && npm run build`, para empacotar o SDK localmente s
 ## Encomendas
 
 O painel mostra as últimas 50 encomendas, identificando as de teste. A cliente consulta apenas as suas na área pessoal. O estado de pagamento é atualizado pelo webhook verificado da Stripe; o painel não permite marcar um pagamento como concluído manualmente.
+
+
+## Envios e traduções
+
+A secção Loja e conta permite configurar portes para Portugal, Europa coberta e Brasil, código postal de origem, peso máximo e conversão manual EUR/BRL. O peso embalado de cada produto começa em 600 g. Aumentar o peso máximo exige rever as tarifas CTT. Os valores guardados são usados pelo servidor de pagamentos.
+
+No editor de produtos, os blocos English e Español permitem personalizar nome, subtítulo, notas, sensação e descrição. Em Conteúdos, escolhe o idioma antes de editar. Textos sem tradução própria usam a versão portuguesa; os textos iniciais têm traduções da loja.

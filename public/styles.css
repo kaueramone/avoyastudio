@@ -14,3 +14,4 @@ dialog{padding:0;border:0;color:var(--ink);background:var(--paper);max-height:90
 .catalogue-empty{grid-column:1/-1;padding:55px 0;font-size:13px;color:var(--muted);line-height:1.9}
 
 @media(max-width:700px){.header-actions{gap:6px}.header-actions .icon-button{min-width:32px;padding:5px}.header-actions .bag-button{gap:3px}.header{grid-template-columns:34px minmax(88px,1fr) auto}.header .logo{width:112px}}
+#locale-controls{display:flex;gap:16px;flex-wrap:wrap}#locale-controls label{display:flex;align-items:center;gap:7px;font-size:10px}#locale-controls select{font:inherit;background:transparent;border:1px solid #c7c9bc;border-radius:6px;padding:9px 6px;min-height:40px;color:inherit}

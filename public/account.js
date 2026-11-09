@@ -1,7 +1,7 @@
 import './app.js';
 import { getAuth,createCaptcha,authError } from './auth.mjs';
 import { escapeHtml as e } from './content.mjs';
-import { currency } from './catalogue.mjs';
+import { formatMoney } from './commerce.mjs';
 
 const content=document.querySelector('#account-content');
 const initialHash=new URLSearchParams(location.hash.slice(1));
@@ -34,12 +34,13 @@ async function renderAccount() {
       const profile=result.data||{};
       target.innerHTML=`<div class="account-grid"><section class="account-card"><h2>Os meus dados.</h2><form id="profile-form"><label>Nome<input name="full_name" autocomplete="name" maxlength="120" required value="${e(profile.full_name||user.user_metadata?.full_name||'')}"></label><label>Telemóvel <span>(opcional)</span><input name="phone" type="tel" autocomplete="tel" maxlength="30" value="${e(profile.phone||'')}"></label><label>Email<input type="email" disabled value="${e(user.email)}"></label><button class="button dark" type="submit">Guardar dados</button><p id="account-status" class="account-message" role="status"></p></form></section><aside class="account-card"><h3>Os teus dados, com cuidado.</h3><p>A morada de entrega será pedida no pagamento, quando as compras estiverem disponíveis. A tua conta não está inscrita em marketing.</p><a class="text-link" href="privacidade.html">Privacidade ↗</a></aside></div>`;
     } else {
-      const result=await client.from('orders').select('id,order_number,status,payment_status,total_cents,shipping_cents,items,is_test,created_at,refunded_cents').eq('user_id',user.id).order('created_at',{ascending:false}).limit(50);if(result.error)throw result.error;
+      const result=await client.from('orders').select('id,order_number,status,payment_status,total_cents,currency,shipping_cents,items,is_test,created_at,refunded_cents').eq('user_id',user.id).order('created_at',{ascending:false}).limit(50);if(result.error)throw result.error;
       target.innerHTML=result.data.length?`<section class="account-orders" aria-label="Histórico de encomendas">${result.data.map(orderCard).join('')}</section>`:`<section class="account-card account-empty"><span aria-hidden="true">✳</span><h2>A tua história começa aqui.</h2><p>Ainda não tens encomendas. Quando fizeres a primeira compra, os detalhes e o acompanhamento ficam guardados neste espaço.</p><a class="button dark" href="index.html#colecao">Descobrir a coleção ↗</a></section>`;
     }
   } catch {target.innerHTML='<section class="account-card"><h2>O teu espaço está a ser preparado.</h2><p>Não foi possível carregar os dados. Tenta novamente dentro de instantes.</p><button class="text-link" data-account-view="orders">Voltar a tentar ↗</button></section>';}
 }
 function orderCard(order) {
+  const currency=value=>formatMoney(value,order.currency,document.documentElement.lang.slice(0,2));
   return `<article class="account-order"><div class="order-heading"><div><h3>${e(order.order_number)}</h3><small>${new Date(order.created_at).toLocaleDateString('pt-PT',{day:'numeric',month:'long',year:'numeric'})} · ${e(paymentStates[order.payment_status]||'A verificar')}</small></div><span class="order-state">${e(states[order.status]||'A acompanhar')}</span></div>${order.is_test?'<span class="order-test">Encomenda de teste · sem cobrança real</span>':''}<div class="order-items">${(order.items||[]).map(item=>`<div class="order-item"><span>${Number(item.quantity)} × ${e(item.name)}</span><span>${currency(Number(item.unit_amount)*Number(item.quantity)/100)}</span></div>`).join('')}</div><div class="order-item"><span>Entrega</span><span>${currency(order.shipping_cents/100)}</span></div><div class="order-total"><strong>Total</strong><strong>${currency(order.total_cents/100)}</strong></div>${order.refunded_cents?`<p class="account-message">Reembolsado: ${currency(order.refunded_cents/100)}</p>`:''}</article>`;
 }
 async function loadUser() {

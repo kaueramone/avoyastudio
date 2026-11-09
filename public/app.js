@@ -1,3 +1,5 @@
+import { convertedCents,selectedCurrency,formatMoney } from './commerce.mjs';
+import { mountLocaleControls } from './i18n.mjs';
 import { products, currency } from './catalogue.mjs';
 import { cleanCart, cartTotal } from './cart.mjs';
 import { loadStore, applyContent } from './store.mjs';
@@ -16,7 +18,7 @@ document.querySelector('#site-header').innerHTML = `
     <div class="header-actions"><a class="icon-button account-link" href="conta.html" aria-label="A minha conta"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7.5" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></svg></a><button class="icon-button" data-search aria-label="Pesquisar velas">${searchIcon}</button><button class="bag-button" data-cart aria-label="Abrir saco, 0 artigos">${bagIcon}<span class="bag-word">Saco</span><span id="bag-count">(0)</span></button></div>
   </header>`;
 document.querySelector('#site-footer').innerHTML = `
-  <footer class="footer section-shell"><div class="footer-main"><div><a class="footer-logo" href="index.html"><img src="assets/logo.svg" alt="Avoya Studio — início" width="220" height="96"></a><p>Raízes brasileiras.<br>Histórias do mundo.<br>Feito com cuidado, em Portugal.</p></div><div><p class="eyebrow">O universo Avoya</p><a href="index.html#colecao">A coleção</a><a href="simone.html">Simone Martins</a><a href="cuidados.html">O ritual e os cuidados</a><a href="conta.html">A minha conta</a><a href="privacidade.html">Privacidade</a></div><div><p class="eyebrow">Estamos por aqui</p><a href="mailto:contact@avoyastudio.com">contact@avoyastudio.com</a><p class="social-placeholder">@avoyastudio<br><span>Redes sociais em breve</span></p></div></div><div class="footer-bottom"><span>© ${new Date().getFullYear()} Avoya Studio</span><span>Portugal · EUR €</span><button class="plain-button" data-info>Informações sobre esta loja</button></div></footer>`;
+  <footer class="footer section-shell"><div class="footer-main"><div><a class="footer-logo" href="index.html"><img src="assets/logo.svg" alt="Avoya Studio — início" width="220" height="96"></a><p>Raízes brasileiras.<br>Histórias do mundo.<br>Feito com cuidado, em Portugal.</p></div><div><p class="eyebrow">O universo Avoya</p><a href="index.html#colecao">A coleção</a><a href="simone.html">Simone Martins</a><a href="cuidados.html">O ritual e os cuidados</a><a href="conta.html">A minha conta</a><a href="privacidade.html">Privacidade</a></div><div><p class="eyebrow">Estamos por aqui</p><a href="mailto:contact@avoyastudio.com">contact@avoyastudio.com</a><p class="social-placeholder">@avoyastudio<br><span>Redes sociais em breve</span></p></div></div><div class="footer-bottom"><span>© ${new Date().getFullYear()} Avoya Studio</span><div id="locale-controls"></div><button class="plain-button" data-info>Informações sobre esta loja</button></div></footer>`;
 document.querySelector('#overlays').innerHTML = `
   <dialog id="product-dialog" class="product-dialog" aria-label="Detalhes da vela">${closeButton}<div id="product-detail"></div></dialog>
   <dialog id="cart-dialog" class="cart-dialog" aria-labelledby="cart-title"><div class="dialog-heading"><div><p class="eyebrow">Um ritual à tua medida</p><h2 id="cart-title">O teu saco.</h2></div>${closeButton}</div><div id="cart-lines"></div><div id="cart-bottom"></div></dialog>
@@ -91,11 +93,11 @@ function renderCart() {
   }
   lines.innerHTML = cart.map(item => {
     const p = displayProduct(products.find(p => p.id === item.id));
-    return `<article class="cart-line product-${p.id}"><img src="${p.image}" alt="${p.name}" width="82" height="108"><div><h3>${p.name}</h3><p>${p.size} · ${currency(p.price)}</p><div class="quantity"><button data-change="${p.id}" data-delta="-1" aria-label="Diminuir quantidade de ${p.name}">−</button><span aria-label="Quantidade">${item.quantity}</span><button data-change="${p.id}" data-delta="1" ${item.quantity >= 20 ? 'disabled' : ''} aria-label="Aumentar quantidade de ${p.name}">+</button></div></div><div class="cart-line-end"><span>${currency(p.price * item.quantity)}</span><button class="remove" data-remove="${p.id}" aria-label="Remover ${p.name}">Remover</button></div></article>`;
+    return `<article class="cart-line product-${p.id}"><img src="${p.image}" alt="${p.name}" width="82" height="108"><div><h3>${p.name}</h3><p>${p.size} · ${currency(p.price)}</p><div class="quantity"><button data-change="${p.id}" data-delta="-1" aria-label="Diminuir quantidade de ${p.name}">−</button><span aria-label="Quantidade">${item.quantity}</span><button data-change="${p.id}" data-delta="1" ${item.quantity >= 20 ? 'disabled' : ''} aria-label="Aumentar quantidade de ${p.name}">+</button></div></div><div class="cart-line-end"><span>${formatMoney(convertedCents(Math.round(p.price*100))*item.quantity/100,selectedCurrency(),document.documentElement.lang.slice(0,2))}</span><button class="remove" data-remove="${p.id}" aria-label="Remover ${p.name}">Remover</button></div></article>`;
   }).join('');
   const message = `Olá, Avoya! Gostaria de saber mais sobre esta seleção de apresentação:\n\n${cart.map(item => `${item.quantity} × ${products.find(p => p.id === item.id).name}`).join('\n')}\n\nSei que os produtos são ilustrativos e que esta mensagem não constitui uma encomenda.`;
   const mail = `mailto:contact@avoyastudio.com?subject=${encodeURIComponent('A minha seleção Avoya')}&body=${encodeURIComponent(message)}`;
-  document.querySelector('#cart-bottom').innerHTML = `<div class="cart-subtotal"><span>Subtotal ilustrativo</span><strong>${currency(cartTotal(cart))}</strong></div><p class="demo-note">Esta seleção fica guardada no teu navegador. Não cria uma encomenda nem reserva produtos.</p><a class="button dark full" href="checkout.html">Rever a seleção ↗</a><a class="text-link cart-contact" href="${mail}">Falar sobre esta seleção ↗</a>`;
+  document.querySelector('#cart-bottom').innerHTML = `<div class="cart-subtotal"><span>Subtotal ilustrativo</span><strong>${formatMoney(cart.reduce((sum,item)=>sum+convertedCents(Math.round(products.find(p=>p.id===item.id).price*100))*item.quantity,0)/100,selectedCurrency(),document.documentElement.lang.slice(0,2))}</strong></div><p class="demo-note">Esta seleção fica guardada no teu navegador. Não cria uma encomenda nem reserva produtos.</p><a class="button dark full" href="checkout.html">Rever a seleção ↗</a><a class="text-link cart-contact" href="${mail}">Falar sobre esta seleção ↗</a>`;
 }
 function search() {
   const normalize = value => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-PT');
@@ -146,3 +148,6 @@ document.addEventListener('keydown', event => {
 });
 function displayProduct(product) { return Object.fromEntries(Object.entries(product).map(([key,value]) => [key, typeof value === 'string' ? escapeHtml(value) : value])); }
 saveCart(); renderProducts(); applyContent(store.content,store.config);
+
+mountLocaleControls();
+window.addEventListener('avoya-cart-updated',()=>{try{cart=cleanCart(JSON.parse(localStorage.getItem('avoya-bag-v1')||'[]'));}catch{cart=[];}saveCart();});

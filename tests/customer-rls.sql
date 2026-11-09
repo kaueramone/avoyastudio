@@ -36,6 +36,19 @@ begin
     perform id from public.payment_events;
     raise exception 'Client can read private payment events';
   exception when insufficient_privilege then null; end;
+  update public.commerce_settings set portugal_cents=0 where id='shop';
+  get diagnostics affected = row_count;
+  if affected <> 0 then raise exception 'Customer can change shipping rates'; end if;
+  if not exists (select 1 from public.commerce_settings where id='shop') then raise exception 'Public shipping rates unavailable'; end if;
   if (select public.is_store_admin()) then raise exception 'Customer has admin role'; end if;
+end $$;
+reset role;
+set local role anon;
+do $$ begin
+  if not exists (select 1 from public.commerce_settings where id='shop') then raise exception 'Anonymous shipping rates unavailable'; end if;
+  begin
+    update public.commerce_settings set brazil_cents=0;
+    raise exception 'Anonymous user can alter shipping';
+  exception when insufficient_privilege then null; end;
 end $$;
 rollback;

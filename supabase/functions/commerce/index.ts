@@ -6,9 +6,9 @@ if(Deno.env.get('ALLOW_LOCAL_PREVIEW')==='true')origins.add('http://127.0.0.1:41
 const mode=Deno.env.get('CHECKOUT_MODE')||'disabled';
 const stripeKey=Deno.env.get('STRIPE_SECRET_KEY')||'';
 const validMode=mode==='test'?/^(sk|rk)_test_/.test(stripeKey):mode==='live'&&Deno.env.get('ALLOW_LIVE_PAYMENTS')==='true'&&/^(sk|rk)_live_/.test(stripeKey);
-const shippingValue=Deno.env.get('SHIPPING_CENTS');
-const shipping=Number(shippingValue ?? '0');
-const enabled=validMode&&Number.isInteger(shipping)&&shipping>=0&&shipping<=100000&&(mode!=='live'||shippingValue!==undefined);
+const enabled=Boolean(validMode)&&/^whsec_/.test(Deno.env.get('STRIPE_WEBHOOK_SECRET')||'');
+const europeanCountries=['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','RO','SK','SI','ES','SE','GB','NO','IS','LI','CH','AD','MC','SM','VA'];
+async function settings(){const result=await admin.from('commerce_settings').select('*').eq('id','shop').single();if(result.error||!result.data)throw new Error('Shipping configuration unavailable');return result.data;}
 const url=Deno.env.get('SUPABASE_URL')!;
 const admin=createClient(url,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -30,24 +30,31 @@ async function checkout(req:Request,origin:string){
   const quantities=new Map<string,number>();
   for(const item of data.items){if(!item||typeof item.id!=='string'||!/^[a-zA-Z0-9_-]{1,64}$/.test(item.id)||!Number.isInteger(item.quantity)||item.quantity<1||item.quantity>20||quantities.has(item.id))throw new RequestError(400,'invalid_cart','O saco não é válido.');quantities.set(item.id,item.quantity);}
   if([...quantities.values()].reduce((a,b)=>a+b,0)>100)throw new RequestError(400,'invalid_cart','O saco excede o limite de unidades.');
+  const country=data.country||'PT', currency=data.currency||'eur', language=['pt','en','es'].includes(data.language)?data.language:'pt';
+  if(!['PT','BR',...europeanCountries].includes(country)||!['eur','brl'].includes(currency))throw new RequestError(400,'invalid_destination','Escolhe um destino e uma moeda disponíveis.');
+  const rules=await settings();
+  const factor=currency==='brl'?Number(rules.eur_brl):1;
+  const shipping= Math.round((country==='PT'?rules.portugal_cents:country==='BR'?rules.brazil_cents:rules.europe_cents)*factor);
   const existing=await admin.from('orders').select('*').eq('user_id',user.id).eq('checkout_key',data.checkout_key).maybeSingle();if(existing.error)throw existing.error;
   let order=existing.data;
   if(order){
-    const same=order.is_test===(mode==='test')&&order.items.length===quantities.size&&order.items.every((p:any)=>quantities.get(p.product_id)===p.quantity);
+    const same=order.is_test===(mode==='test')&&order.currency===currency&&order.destination_country===country&&order.language===language&&order.items.length===quantities.size&&order.items.every((p:any)=>quantities.get(p.product_id)===p.quantity);
     if(!same)throw new RequestError(409,'checkout_expired','O saco foi alterado. Tenta novamente.');
     if(order.stripe_session_id){const session=await stripe(`checkout/sessions/${encodeURIComponent(order.stripe_session_id)}`);if(session.status==='open'&&session.url)return {url:session.url};throw new RequestError(409,'checkout_expired','Este pagamento já terminou ou expirou. Consulta as tuas encomendas.');}
   } else {
-    const catalogue=await admin.from('products').select('id,name,price,status').in('id',[...quantities.keys()]).eq('status','published');if(catalogue.error)throw catalogue.error;
+    const catalogue=await admin.from('products').select('id,name,price,status,packed_weight_g,translations').in('id',[...quantities.keys()]).eq('status','published');if(catalogue.error)throw catalogue.error;
     if(catalogue.data.length!==quantities.size)throw new RequestError(409,'catalogue_changed','Um produto já não está disponível. Atualiza o saco.');
-    const items=catalogue.data.map(p=>({product_id:p.id,name:p.name,quantity:quantities.get(p.id)!,unit_amount:Math.round(Number(p.price)*100)})).sort((a,b)=>a.product_id.localeCompare(b.product_id));
+    const weight=catalogue.data.reduce((sum,p)=>sum+(p.packed_weight_g||1000)*quantities.get(p.id)!,0);
+    if(weight>rules.max_weight_g)throw new RequestError(409,'shipping_quote_required','Esta encomenda excede o peso previsto para a tarifa. Contacta o estúdio para um orçamento de envio.');
+    const items=catalogue.data.map(p=>({product_id:p.id,name:p.translations?.[language]?.name||p.name,quantity:quantities.get(p.id)!,unit_amount:Math.round(Math.round(Number(p.price)*100)*factor)})).sort((a,b)=>a.product_id.localeCompare(b.product_id));
     if(items.some(p=>!Number.isSafeInteger(p.unit_amount)||p.unit_amount<1))throw new RequestError(409,'catalogue_changed','Um produto ainda não está disponível para compra.');
     const subtotal=items.reduce((sum,p)=>sum+p.unit_amount*p.quantity,0);
-    const inserted=await admin.from('orders').insert({user_id:user.id,customer_email:user.email,checkout_key:data.checkout_key,items,subtotal_cents:subtotal,shipping_cents:shipping,total_cents:subtotal+shipping,is_test:mode==='test'}).select().single();
+    const inserted=await admin.from('orders').insert({user_id:user.id,customer_email:user.email,checkout_key:data.checkout_key,items,currency,destination_country:country,language,shipping_quote:{origin_postcode:rules.origin_postcode,weight_g:weight,max_weight_g:rules.max_weight_g,eur_brl:Number(rules.eur_brl),rate_date:rules.rate_date},subtotal_cents:subtotal,shipping_cents:shipping,total_cents:subtotal+shipping,is_test:mode==='test'}).select().single();
     if(inserted.error){if(inserted.error.code==='23505')throw new RequestError(409,'checkout_in_progress','O pagamento está a ser preparado. Tenta novamente dentro de instantes.');throw inserted.error;}order=inserted.data;
   }
-  const body=new URLSearchParams({mode:'payment',customer_email:user.email!,client_reference_id:order.id,success_url:`${origin}/checkout.html?resultado=sucesso&pedido=${order.id}`,cancel_url:`${origin}/checkout.html?resultado=cancelado&pedido=${order.id}`,'metadata[avoya_order]':order.id,'payment_intent_data[metadata][avoya_order]':order.id,billing_address_collection:'required','shipping_address_collection[allowed_countries][0]':'PT',locale:'pt'});
-  order.items.forEach((item:any,i:number)=>{body.set(`line_items[${i}][price_data][currency]`,'eur');body.set(`line_items[${i}][price_data][product_data][name]`,item.name);body.set(`line_items[${i}][price_data][unit_amount]`,String(item.unit_amount));body.set(`line_items[${i}][quantity]`,String(item.quantity));});
-  body.set('shipping_options[0][shipping_rate_data][type]','fixed_amount');body.set('shipping_options[0][shipping_rate_data][fixed_amount][amount]',String(order.shipping_cents));body.set('shipping_options[0][shipping_rate_data][fixed_amount][currency]','eur');body.set('shipping_options[0][shipping_rate_data][display_name]',mode==='test'?'Entrega de teste':'Entrega em Portugal');
+  const body=new URLSearchParams({mode:'payment',customer_email:user.email!,client_reference_id:order.id,success_url:`${origin}/checkout.html?resultado=sucesso&pedido=${order.id}`,cancel_url:`${origin}/checkout.html?resultado=cancelado&pedido=${order.id}`,'metadata[avoya_order]':order.id,'payment_intent_data[metadata][avoya_order]':order.id,billing_address_collection:'required','shipping_address_collection[allowed_countries][0]':order.destination_country,locale:order.language});
+  order.items.forEach((item:any,i:number)=>{body.set(`line_items[${i}][price_data][currency]`,order.currency);body.set(`line_items[${i}][price_data][product_data][name]`,item.name);body.set(`line_items[${i}][price_data][unit_amount]`,String(item.unit_amount));body.set(`line_items[${i}][quantity]`,String(item.quantity));});
+  body.set('shipping_options[0][shipping_rate_data][type]','fixed_amount');body.set('shipping_options[0][shipping_rate_data][fixed_amount][amount]',String(order.shipping_cents));body.set('shipping_options[0][shipping_rate_data][fixed_amount][currency]',order.currency);body.set('shipping_options[0][shipping_rate_data][display_name]',order.language==='en'?'CTT delivery':order.language==='es'?'Envío CTT':'Entrega CTT');
   const session=await stripe('checkout/sessions',body,`avoya-${mode}-${order.id}`);
   if(!session.url||session.livemode!==(mode==='live'))throw new Error('Unexpected checkout mode');
   const saved=await admin.from('orders').update({stripe_session_id:session.id}).eq('id',order.id);if(saved.error)throw saved.error;
@@ -68,15 +75,16 @@ async function webhook(req:Request){
   const known=await admin.from('payment_events').select('id').eq('id',event.id).maybeSingle();if(known.error)throw known.error;if(known.data)return {received:true};
   if(event.type==='charge.refunded'){
     const charge=object;
-    const found=await admin.from('orders').select('id,total_cents,is_test').eq('stripe_payment_intent_id',charge.payment_intent).maybeSingle();if(found.error)throw found.error;
-    const order=found.data;
-    if(order&&charge.livemode===!order.is_test&&charge.currency==='eur'&&Number.isInteger(charge.amount_refunded)&&charge.amount_refunded>0&&charge.amount_refunded<=order.total_cents){
-      const result=await admin.from('orders').update({refunded_cents:charge.amount_refunded,payment_status:charge.amount_refunded===order.total_cents?'refunded':'partially_refunded'}).eq('id',order.id).lt('refunded_cents',charge.amount_refunded);if(result.error)throw result.error;
+    const found=await admin.from('orders').select('id,total_cents,is_test,currency').eq('stripe_payment_intent_id',charge.payment_intent).maybeSingle();if(found.error)throw found.error;
+    let order=found.data;
+    if(!order){let candidate=charge.metadata?.avoya_order;if(!candidate&&typeof charge.payment_intent==='string'){const intent=await stripe(`payment_intents/${encodeURIComponent(charge.payment_intent)}`);candidate=intent.metadata?.avoya_order;}if(candidate&&uuid.test(candidate)){const match=await admin.from('orders').select('*').eq('id',candidate).maybeSingle();if(match.error)throw match.error;order=match.data;}}
+    if(order&&charge.amount===order.total_cents&&(!order.stripe_payment_intent_id||order.stripe_payment_intent_id===charge.payment_intent)&&charge.livemode===!order.is_test&&charge.currency===order.currency&&Number.isInteger(charge.amount_refunded)&&charge.amount_refunded>0&&charge.amount_refunded<=order.total_cents){
+      const result=await admin.from('orders').update({status:charge.amount_refunded===order.total_cents?'cancelled':'confirmed',stripe_payment_intent_id:charge.payment_intent,refunded_cents:charge.amount_refunded,payment_status:charge.amount_refunded===order.total_cents?'refunded':'partially_refunded'}).eq('id',order.id).lt('refunded_cents',charge.amount_refunded);if(result.error)throw result.error;
     }
   } else if(['checkout.session.completed','checkout.session.async_payment_succeeded','checkout.session.async_payment_failed','checkout.session.expired'].includes(event.type)){
     const orderId=object.metadata?.avoya_order;if(!orderId||!uuid.test(orderId))return {received:true};
     const found=await admin.from('orders').select('*').eq('id',orderId).single();if(found.error)throw found.error;const order=found.data;
-    if(object.id!==order.stripe_session_id||object.livemode===order.is_test||object.currency!=='eur'||object.amount_total!==order.total_cents)throw new Error('Payment does not match order');
+    if(object.id!==order.stripe_session_id||object.livemode===order.is_test||object.currency!==order.currency||object.amount_total!==order.total_cents)throw new Error('Payment does not match order');
     const paid=object.payment_status==='paid'&&['checkout.session.completed','checkout.session.async_payment_succeeded'].includes(event.type);
     const failed=['checkout.session.async_payment_failed','checkout.session.expired'].includes(event.type);
     if(['unpaid','processing'].includes(order.payment_status)){
@@ -93,7 +101,7 @@ Deno.serve(async req=>{
     if(action==='webhook'&&req.method==='POST')return response('',await webhook(req));
     if(!origins.has(origin))return response('',{error:'origin_not_allowed',message:'Origem não autorizada.'},403);
     if(req.method==='OPTIONS')return response(origin,{ok:true});
-    if(req.method==='GET')return response(origin,{enabled,is_test:mode!=='live',shipping_cents:shipping});
+    if(req.method==='GET')return response(origin,{enabled,is_test:mode!=='live',settings:await settings(),countries:['PT','BR',...europeanCountries]});
     if(req.method==='POST')return response(origin,await checkout(req,origin));
     return response(origin,{error:'method_not_allowed'},405);
   }catch(error){
