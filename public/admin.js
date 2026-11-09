@@ -25,7 +25,7 @@ const loginStatus = document.querySelector('#login-status');
 const loginButton = document.querySelector('#login-submit');
 
 function toast(message) {
-  const target=document.querySelector('#admin-toast');target.textContent=message;target.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>target.classList.remove('visible'),4000);
+  const target=document.querySelector('#admin-toast');document.querySelector('#media-status').textContent=message;target.textContent=message;target.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>target.classList.remove('visible'),4000);
 }
 function imageUrl(value) { return validImage(value,config?.supabaseUrl) ? value : 'assets/hero.webp'; }
 function badge(status) { return `<span class="badge ${e(status)}">${labels[status] || 'Rascunho'}</span>`; }
@@ -125,7 +125,7 @@ async function saveContent(event) {
   }catch(error){document.querySelector('#content-error').textContent=error.message==='conflict'?'Os conteúdos foram alterados noutro dispositivo. Guarda uma cópia do teu texto e atualiza antes de continuar.':errorMessage(error);}
   finally{button.disabled=false;}
 }
-function openPicker(target) {ui.pickerTarget=target;document.querySelector('#media-picker-grid').innerHTML=libraryTiles(true);mediaDialog.showModal();}
+function openPicker(target) {document.querySelector('#media-status').textContent='';ui.pickerTarget=target;document.querySelector('#media-picker-grid').innerHTML=libraryTiles(true);mediaDialog.showModal();}
 function pickMedia(index) {
   const image=[...ui.media,...builtinMedia][index];if(!image||!ui.pickerTarget)return;
   const input=document.getElementById(ui.pickerTarget);if(!input)return;
@@ -160,7 +160,7 @@ document.addEventListener('click',async event=>{
   if(target.hasAttribute('data-content-tab')){if(!await discardCheck())return;ui.contentTab=target.dataset.contentTab;renderContent();return;}
   if(target.hasAttribute('data-pick-target')){openPicker(target.dataset.pickTarget);return;}
   if(target.hasAttribute('data-media-index')){pickMedia(Number(target.dataset.mediaIndex));return;}
-  if(target.hasAttribute('data-media-preview')){openPicker(null);return;}
+  if(target.hasAttribute('data-media-preview')){const image=[...ui.media,...builtinMedia][Number(target.dataset.mediaPreview)];if(image){document.querySelector('#preview-title').textContent=image.name;document.querySelector('#preview-image').src=imageUrl(image.url);document.querySelector('#preview-image').alt=image.alt||image.name;document.querySelector('#preview-dialog').showModal();}return;}
   if(target.hasAttribute('data-close')){const dialog=target.closest('dialog');if(dialog===productDialog&&!await discardCheck())return;if(dialog===productDialog)ui.dirty=false;dialog.close();return;}
   if(target.hasAttribute('data-logout')||target.id==='logout'){await logout();return;}
   if(target.hasAttribute('data-retry'))await authorize();
