@@ -19,7 +19,7 @@ Preview: http://127.0.0.1:4173. O build gera `dist/`.
 
 Conta **contact@avoyastudio.com**. Static Site `avoyastudio`, branch `main`, comando `npm ci && npm run build`, diretório de publicação `dist`. A configuração equivalente está em `render.yaml` para Blueprints. Um Static Site não exige tráfego periódico nem cron para evitar suspensão por inatividade. A publicação atual pode ser acionada por Manual Deploy > Deploy latest commit no Render.
 
-Pré-visualização pública: https://avoyastudio.onrender.com. Administração: https://avoyastudio.onrender.com/admin.html. Os domínios `avoyastudio.com` e `www.avoyastudio.com` estão associados ao serviço. A Cloudflare gere o DNS; os registos de email Hostinger ficam sem proxy. O frontend contém apenas chaves publicáveis, nunca segredos de servidor.
+Pré-visualização pública: https://avoyastudio.onrender.com. Administração: https://avoyastudio.onrender.com/admin.html. Os domínios `avoyastudio.com` e `www.avoyastudio.com` estão associados ao serviço. A Cloudflare gere o DNS, com proxy ativo no domínio principal e em www e SSL Full (strict); os registos de email Hostinger ficam sem proxy. O frontend contém apenas chaves publicáveis, nunca segredos de servidor.
 
 ## O que funciona
 

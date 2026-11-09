@@ -18,6 +18,12 @@ O projeto dedicado Supabase é `apxlqpcmyvznmejokfdj`, organização Avoya Studi
 
 RLS está ativa em `products`, `site_content`, `media` e `admin_users`. A lista de administradores não pode ser alterada através da API pública. Apenas o email autenticado que corresponde a essa lista pode editar. A loja lê apenas produtos publicados. A decisão de autorização é aplicada na base de dados, independentemente da interface.
 
+## Envio dos links de acesso
+
+O fornecedor de email padrão do Supabase limita os envios a dois por hora. O painel preserva a mensagem de falha mesmo quando o Turnstile se renova, para não apresentar um pedido recusado como enviado. A configuração de SMTP da Hostinger usa `smtp.hostinger.com`, porta 465, remetente Avoya Studio e utilizador `contact@avoyastudio.com`. A palavra-passe da caixa fica apenas no Supabase, introduzida pelo titular. Não consta do repositório nem das variáveis do frontend.
+
+Os links só podem ser usados uma vez. Um link já utilizado ou expirado exige um novo pedido.
+
 ## Verificações
 
 `npm test`: saco, preços, normalização, escape de HTML e validação de imagens.
