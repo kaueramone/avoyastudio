@@ -17,6 +17,7 @@ const labels = { published:'Publicado', draft:'Rascunho', archived:'Arquivado' }
 const builtinMedia = ['hero','matcha','amber','raiz','mare','atelier'].map(name=>({url:`assets/${name}.webp`,name:({hero:'Imagem principal',matcha:'Jardim de Lisboa',amber:'Sol de Marrakech',raiz:'Raiz',mare:'Maré Serena',atelier:'O atelier'})[name]}));
 const ui = { view:'overview', filter:'all', search:'', contentTab:'home', products:[], media:[], content:{...defaultContent}, contentVersion:null, productVersion:null, pickerTarget:null, dirty:false, formBaseline:'', pendingClose:null };
 let config, client, user, toastTimer, captchaToken='', widgetId, refreshing=false;
+const expiredEmailLink = new URLSearchParams(location.hash.slice(1)).get('error_code') === 'otp_expired';
 const main = document.querySelector('#admin-main');
 const productDialog = document.querySelector('#editor-dialog');
 const mediaDialog = document.querySelector('#media-dialog');
@@ -181,7 +182,7 @@ window.addEventListener('beforeunload',event=>{if(ui.dirty){event.preventDefault
 async function initCaptcha() {
   if(!config.turnstileSiteKey){loginStatus.textContent='A configuração de segurança ainda está a ser concluída.';return;}
   const script=document.createElement('script');script.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';script.async=true;script.defer=true;
-  script.onload=()=>{widgetId=window.turnstile.render('#turnstile',{sitekey:config.turnstileSiteKey,theme:'light','size':'flexible',callback:token=>{captchaToken=token;loginButton.disabled=false;loginStatus.textContent='Enviamos um link pessoal para o teu email. Não precisas de palavra-passe.';},'expired-callback':()=>{captchaToken='';loginButton.disabled=true;},'error-callback':()=>{captchaToken='';loginButton.disabled=true;loginStatus.textContent='Não foi possível verificar o acesso. Atualiza a página para tentar novamente.';}});};
+  script.onload=()=>{widgetId=window.turnstile.render('#turnstile',{sitekey:config.turnstileSiteKey,theme:'light','size':'flexible',callback:token=>{captchaToken=token;loginButton.disabled=false;loginStatus.textContent=expiredEmailLink?'Este link já foi usado ou expirou. Pede um novo link para entrar.':'Enviamos um link pessoal para o teu email. Não precisas de palavra-passe.';},'expired-callback':()=>{captchaToken='';loginButton.disabled=true;},'error-callback':()=>{captchaToken='';loginButton.disabled=true;loginStatus.textContent='Não foi possível verificar o acesso. Atualiza a página para tentar novamente.';}});};
   script.onerror=()=>{loginStatus.textContent='A verificação de segurança não carregou. Verifica a ligação e atualiza a página.';};document.head.append(script);
 }
 document.querySelector('#login-form').addEventListener('submit',async event=>{
