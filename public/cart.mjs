@@ -1,6 +1,6 @@
 import { products } from './catalogue.mjs';
-const ids = new Set(products.map(p => p.id));
 export function cleanCart(input) {
+  const ids = new Set(products.map(p => p.id));
   if (!Array.isArray(input)) return [];
   const result = new Map();
   for (const item of input) {

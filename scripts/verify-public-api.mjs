@@ -1,0 +1,14 @@
+import { readFile } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const config=JSON.parse(await readFile('public/public-config.json','utf8'));
+const base=config.supabaseUrl;
+const headers={apikey:config.supabaseKey,'Content-Type':'application/json'};
+const published=await fetch(`${base}/rest/v1/products?select=id,name&status=eq.published`,{headers});
+assert.equal(published.status,200);
+const rows=await published.json();assert.ok(rows.length>=4);
+const draft=await fetch(`${base}/rest/v1/products?select=id&status=eq.draft`,{headers});assert.equal(draft.status,200);assert.deepEqual(await draft.json(),[]);
+const admins=await fetch(`${base}/rest/v1/admin_users?select=email`,{headers});assert.ok([401,403].includes(admins.status));
+const write=await fetch(`${base}/rest/v1/products`,{method:'POST',headers,body:JSON.stringify({id:'security-probe',name:'Security probe',price:0,status:'draft'})});assert.ok([401,403].includes(write.status));
+const login=await fetch(`${base}/auth/v1/otp`,{method:'POST',headers,body:JSON.stringify({email:'contact@avoyastudio.com',create_user:false})});
+assert.equal(login.status,400);const error=await login.json();assert.match(JSON.stringify(error),/captcha/i);
+console.log('Public API: published catalogue readable; drafts hidden; admin list and writes denied; login without CAPTCHA rejected.');

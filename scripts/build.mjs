@@ -1,13 +1,16 @@
 import { cp, mkdir, readdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
 const projectRoot = fileURLToPath(new URL('../', import.meta.url));
 const output = resolve(projectRoot, 'dist');
 if (dirname(output) !== resolve(projectRoot)) throw new Error('Unsafe build output path');
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 await cp('public', 'dist', { recursive: true });
-const required = ['index.html', 'simone.html', 'cuidados.html', 'assets/hero.webp', 'assets/amber.webp', 'assets/atelier.webp', 'assets/raiz.webp', 'assets/mare.webp', 'assets/matcha.webp', 'assets/logo.svg', 'assets/favicon.svg', 'app.js', 'styles.css'];
+await mkdir('dist/vendor', { recursive: true });
+await build({ stdin: { contents: "export { createClient } from '@supabase/supabase-js';", resolveDir: projectRoot }, bundle: true, format: 'esm', platform: 'browser', target: ['es2022'], minify: true, outfile: 'dist/vendor/supabase.js', legalComments: 'none' });
+const required = ['index.html', 'simone.html', 'cuidados.html', 'admin.html', 'admin.js', 'admin.css', 'vendor/supabase.js', 'assets/hero.webp', 'assets/amber.webp', 'assets/atelier.webp', 'assets/raiz.webp', 'assets/mare.webp', 'assets/matcha.webp', 'assets/logo.svg', 'assets/favicon.svg', 'app.js', 'styles.css'];
 for (const path of required) await readFile(`dist/${path}`);
 const items = await readdir('dist');
 await writeFile('dist/health', 'ok\n');

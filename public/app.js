@@ -1,5 +1,8 @@
 import { products, currency } from './catalogue.mjs';
 import { cleanCart, cartTotal } from './cart.mjs';
+import { loadStore, applyContent } from './store.mjs';
+import { escapeHtml } from './content.mjs';
+const store = await loadStore();
 
 const bagIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14l1 14H4L5 7ZM9 8V6a3 3 0 0 1 6 0v2"/></svg>';
 const searchIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>';
@@ -62,6 +65,7 @@ function addToCart(id) {
   saveCart(); notify(`${product.name} adicionado ao saco.`);
 }
 function productCard(product) {
+  product = displayProduct(product);
   return `<article class="product-card product-${product.id}"><div class="product-photo"><button class="product-open" data-product="${product.id}" aria-label="Ver ${product.name}"><img src="${product.image}" alt="Imagem ilustrativa da vela ${product.name}" width="600" height="750" loading="lazy"></button><span class="product-tag">${product.mood}</span><button class="quick-add" data-add="${product.id}" aria-label="Adicionar ${product.name} ao saco">+</button></div><div class="product-line"><button data-product="${product.id}" class="product-name">${product.name}</button><span>${currency(product.price)}</span></div><p class="product-notes">${product.notes}</p><p class="product-meta">Vela artesanal · ${product.size}</p></article>`;
 }
 function renderProducts() {
@@ -69,12 +73,14 @@ function renderProducts() {
   const filtered = products.filter(p => family === 'Todas' || p.family === family);
   if (sort !== 'featured') filtered.sort((a, b) => sort === 'price-asc' ? a.price - b.price : b.price - a.price);
   grid.innerHTML = filtered.map(productCard).join('');
+  if (!filtered.length) grid.innerHTML = `<p class="catalogue-empty">${store.available ? 'A coleção está a ser preparada. Volta em breve para descobrir as novidades.' : 'A coleção está temporariamente indisponível. Tenta novamente dentro de instantes.'}</p>`;
   document.querySelector('#product-count').textContent = `${filtered.length} velas nesta seleção`;
 }
 function showProduct(id) {
-  const p = products.find(item => item.id === id); if (!p) return;
+  const raw = products.find(item => item.id === id); if (!raw) return;
+  const p = displayProduct(raw);
   document.querySelector('#product-detail').innerHTML = `<div class="detail-layout product-${p.id}"><div class="detail-image"><img src="${p.image}" alt="Imagem ilustrativa da vela ${p.name}" width="700" height="875"></div><div class="detail-copy"><p class="eyebrow">A primeira coleção · ${p.family}</p><h2>${p.name}</h2><p class="detail-subtitle">${p.subtitle}</p><p>${p.description}</p><div class="detail-notes"><span class="eyebrow">Notas imaginadas</span><p>${p.notes}</p></div><div class="detail-price"><span>${currency(p.price)}</span><span>Vela artesanal · ${p.size}</span></div><button class="button dark full" data-add="${p.id}">Adicionar ao saco <span aria-hidden="true">+</span></button><p class="demo-note">Produto de demonstração. Imagem, aroma, peso e preço ilustrativos. As vendas ainda não estão abertas.</p><a class="text-link" href="cuidados.html">Conhecer os cuidados ↗</a></div></div>`;
-  document.querySelector('#product-dialog').setAttribute('aria-label', `Detalhes de ${p.name}`);
+  document.querySelector('#product-dialog').setAttribute('aria-label', `Detalhes de ${raw.name}`);
   openDialog('product-dialog');
 }
 function renderCart() {
@@ -84,7 +90,7 @@ function renderCart() {
     document.querySelector('#cart-bottom').innerHTML = ''; return;
   }
   lines.innerHTML = cart.map(item => {
-    const p = products.find(p => p.id === item.id);
+    const p = displayProduct(products.find(p => p.id === item.id));
     return `<article class="cart-line product-${p.id}"><img src="${p.image}" alt="${p.name}" width="82" height="108"><div><h3>${p.name}</h3><p>${p.size} · ${currency(p.price)}</p><div class="quantity"><button data-change="${p.id}" data-delta="-1" aria-label="Diminuir quantidade de ${p.name}">−</button><span aria-label="Quantidade">${item.quantity}</span><button data-change="${p.id}" data-delta="1" ${item.quantity >= 20 ? 'disabled' : ''} aria-label="Aumentar quantidade de ${p.name}">+</button></div></div><div class="cart-line-end"><span>${currency(p.price * item.quantity)}</span><button class="remove" data-remove="${p.id}" aria-label="Remover ${p.name}">Remover</button></div></article>`;
   }).join('');
   const message = `Olá, Avoya! Gostaria de saber mais sobre esta seleção de apresentação:\n\n${cart.map(item => `${item.quantity} × ${products.find(p => p.id === item.id).name}`).join('\n')}\n\nSei que os produtos são ilustrativos e que esta mensagem não constitui uma encomenda.`;
@@ -97,7 +103,7 @@ function search() {
   const matches = products.filter(p => normalize(`${p.name} ${p.notes} ${p.mood} ${p.family}`).includes(term));
   const target = document.querySelector('#search-results');
   if (!matches.length) { target.innerHTML = '<p class="search-empty">Ainda não encontrámos esse aroma. Experimenta “chá”, “âmbar” ou “Raiz”.</p>'; return; }
-  target.innerHTML = matches.map(p => `<button class="search-result product-${p.id}" data-product="${p.id}"><img src="${p.image}" alt="" width="60" height="75"><span><strong>${p.name}</strong><small>${p.notes}</small></span><span>${currency(p.price)} ↗</span></button>`).join('');
+  target.innerHTML = matches.map(displayProduct).map(p => `<button class="search-result product-${p.id}" data-product="${p.id}"><img src="${p.image}" alt="" width="60" height="75"><span><strong>${p.name}</strong><small>${p.notes}</small></span><span>${currency(p.price)} ↗</span></button>`).join('');
 }
 document.addEventListener('click', event => {
   const button = event.target.closest('button');
@@ -138,4 +144,5 @@ document.querySelector('#main-nav').addEventListener('click', event => {
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') { document.querySelector('#main-nav').classList.remove('is-open'); document.querySelector('#menu-toggle').setAttribute('aria-expanded', 'false'); }
 });
-saveCart(); renderProducts();
+function displayProduct(product) { return Object.fromEntries(Object.entries(product).map(([key,value]) => [key, typeof value === 'string' ? escapeHtml(value) : value])); }
+saveCart(); renderProducts(); applyContent(store.content,store.config);
