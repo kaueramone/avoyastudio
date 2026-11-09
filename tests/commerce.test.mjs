@@ -32,7 +32,7 @@ async function fixture(t,env={}){
   const settings={CHECKOUT_MODE:'test',STRIPE_SECRET_KEY:'sk_test_fixture',STRIPE_WEBHOOK_SECRET:'whsec_fixture',SUPABASE_URL:'https://fixture.invalid',SUPABASE_SERVICE_ROLE_KEY:'fixture',SHIPPING_CENTS:'500',...env};
   globalThis.__commerceTestDb={from:table,auth:{getUser:async token=>({data:{user:token==='valid-token'?state.user:null},error:token==='valid-token'?null:{}})}};
   globalThis.Deno={env:{get:key=>settings[key]},serve:handler=>{state.handler=handler;}};
-  globalThis.fetch=async (url,options)=>{assert.match(String(url),/^https:\/\/api.stripe.com\/v1\/checkout\/sessions/);state.stripeBodies.push(options?.body);return Response.json({id:'cs_test_fixture',url:'https://checkout.stripe.com/c/pay/fixture',livemode:false,status:'open'});};
+  globalThis.fetch=async (url,options)=>{if(String(url).endsWith('/accounts/acct_1UZsoCGemINO4zER'))return Response.json({id:'acct_1UZsoCGemINO4zER',charges_enabled:true,payouts_enabled:true});if(String(url).includes('/webhook_endpoints/'))return Response.json({status:'enabled',livemode:true,url:'https://fixture.invalid/functions/v1/commerce?action=webhook'});assert.match(String(url),/^https:\/\/api.stripe.com\/v1\/checkout\/sessions/);state.stripeBodies.push(options?.body);return Response.json({id:'cs_test_fixture',url:'https://checkout.stripe.com/c/pay/fixture',livemode:false,status:'open'});};
   await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}#${randomUUID()}`);
   t.after(()=>{globalThis.Deno=old.Deno;globalThis.__commerceTestDb=old.db;globalThis.fetch=old.fetch;});
   state.request=(body,token='valid-token')=>new Request('https://fixture.invalid/functions/v1/commerce',{method:'POST',headers:{Origin:origin,Authorization:`Bearer ${token}`},body:JSON.stringify(body)});
@@ -98,4 +98,11 @@ test('a verified refund arriving before checkout confirmation cannot be overwrit
  const s=await fixture(t);s.seedOrder();const refund={id:'ch_fixture',metadata:{avoya_order:orderId},payment_intent:'pi_fixture',amount:3100,amount_refunded:3100,currency:'eur',livemode:false};
  assert.equal((await s.handler(s.webhook(refund,'charge.refunded'))).status,200);assert.equal(s.orders[0].payment_status,'refunded');assert.equal(s.orders[0].status,'cancelled');s.events.length=0;
  assert.equal((await s.handler(s.webhook(s.session()))).status,200);assert.equal(s.orders[0].payment_status,'refunded');assert.equal(s.orders[0].refunded_cents,3100);
+});
+
+test('readiness is private and makes only read-only Stripe calls',async t=>{
+ const s=await fixture(t,{STRIPE_SECRET_KEY:'rk_live_fixture'});
+ const request=token=>new Request('https://fixture.invalid/functions/v1/commerce?action=readiness',{headers:{Authorization:`Bearer ${token}`}});
+ assert.equal((await s.handler(request('valid-token'))).status,403);
+ const result=await s.handler(request('fixture'));assert.equal(result.status,200);const data=await result.json();assert.equal(data.stripe_authenticated,true);assert.equal(data.key_mode,'live');assert.equal(data.account_matches,true);assert.equal(data.webhook_active,true);assert.equal(data.checkout_enabled,false);assert.equal(s.orders.length,0);assert.equal(s.stripeBodies.length,0);
 });

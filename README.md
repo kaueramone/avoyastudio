@@ -66,3 +66,6 @@ Europa coberta: UE, Reino Unido, Noruega, Islândia, Liechtenstein, Suíça, And
 Os métodos apresentados pela Stripe dependem da moeda, país e elegibilidade da conta. Na verificação da configuração live em 9/11/2026, Pix, Klarna e MB WAY estavam disponíveis e ligados; Multibanco estava indisponível. O webhook de produção foi criado com os cinco eventos acima. Não foi feita nenhuma compra real nem inseridas chaves secretas pelo agente.
 
 Fontes: https://www.ctt.pt/particulares/enviar/para-o-estrangeiro/encomenda-postal ; https://www.ctt.pt/particulares/enviar/para-portugal/encomenda-postal ; https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html ; https://docs.stripe.com/payments/pix
+
+
+A verificação privada `GET ?action=readiness` aceita apenas a credencial de servidor no testador de funções do Supabase. Consulta a conta e o webhook na Stripe com a chave configurada e devolve apenas indicadores de estado. Não cria sessões, encomendas ou cobranças e não devolve segredos nem dados pessoais.

@@ -94,10 +94,20 @@ async function webhook(req:Request){
   const recorded=await admin.from('payment_events').upsert({id:event.id,event_type:event.type},{onConflict:'id',ignoreDuplicates:true});if(recorded.error)throw recorded.error;
   return {received:true};
 }
+// Read-only deployment check, callable only with the server credential in the
+// Supabase function tester. It never creates orders, sessions or payments.
+async function readiness(req:Request){
+  const serviceKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if(!serviceKey||req.headers.get('Authorization')!==`Bearer ${serviceKey}`)throw new RequestError(403,'forbidden','Acesso reservado ao servidor.');
+  const account=await stripe('accounts/acct_1UZsoCGemINO4zER');
+  const destination=await stripe('webhook_endpoints/we_1UZtZaGemINO4zERVG2tvOwZ');
+  return {stripe_authenticated:true,key_mode:/^(sk|rk)_live_/.test(stripeKey)?'live':/^(sk|rk)_test_/.test(stripeKey)?'test':'unknown',account_matches:account.id==='acct_1UZsoCGemINO4zER',charges_enabled:account.charges_enabled===true,payouts_enabled:account.payouts_enabled===true,webhook_active:destination.status==='enabled'&&destination.livemode===true&&destination.url===`${url}/functions/v1/commerce?action=webhook`,checkout_enabled:enabled};
+}
 Deno.serve(async req=>{
   const origin=req.headers.get('Origin')||'';
   try{
     const action=new URL(req.url).searchParams.get('action');
+    if(action==='readiness'&&req.method==='GET')return response('',await readiness(req));
     if(action==='webhook'&&req.method==='POST')return response('',await webhook(req));
     if(!origins.has(origin))return response('',{error:'origin_not_allowed',message:'Origem não autorizada.'},403);
     if(req.method==='OPTIONS')return response(origin,{ok:true});
