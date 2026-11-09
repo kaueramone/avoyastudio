@@ -1,4 +1,5 @@
 import { createClient } from './vendor/supabase.js';
+import { authError } from './auth.mjs';
 import { getPublicConfig } from './store.mjs';
 import { defaultContent, escapeHtml as e, validImage } from './content.mjs';
 import { currency } from './catalogue.mjs';
@@ -12,12 +13,12 @@ const icons = {
   check:'<path d="m5 12 4 4 10-10"/>',draft:'<path d="M6 3h10l3 3v15H6Z M10 10h5 M10 14h5"/>'
 };
 const svg = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.overview}</svg>`;
-const views = [['overview','Visão geral'],['products','Produtos'],['content','Conteúdos'],['media','Imagens'],['settings','Conta']];
+icons.orders='<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 8h8 M8 12h8 M8 16h5"/>';
+const views = [['overview','Visão geral'],['products','Produtos'],['orders','Encomendas'],['content','Conteúdos'],['media','Imagens'],['settings','Conta']];
 const labels = { published:'Publicado', draft:'Rascunho', archived:'Arquivado' };
 const builtinMedia = ['hero','matcha','amber','raiz','mare','atelier'].map(name=>({url:`assets/${name}.webp`,name:({hero:'Imagem principal',matcha:'Jardim de Lisboa',amber:'Sol de Marrakech',raiz:'Raiz',mare:'Maré Serena',atelier:'O atelier'})[name]}));
-const ui = { view:'overview', filter:'all', search:'', contentTab:'home', products:[], media:[], content:{...defaultContent}, contentVersion:null, productVersion:null, pickerTarget:null, dirty:false, formBaseline:'', pendingClose:null };
+const ui = { view:'overview', filter:'all', search:'', contentTab:'home', products:[], orders:[], media:[], content:{...defaultContent}, contentVersion:null, productVersion:null, pickerTarget:null, dirty:false, formBaseline:'', pendingClose:null };
 let config, client, user, toastTimer, captchaToken='', widgetId, refreshing=false, loginAttempted=false;
-const expiredEmailLink = new URLSearchParams(location.hash.slice(1)).get('error_code') === 'otp_expired';
 const main = document.querySelector('#admin-main');
 const productDialog = document.querySelector('#editor-dialog');
 const mediaDialog = document.querySelector('#media-dialog');
@@ -63,16 +64,21 @@ function libraryTiles(picker=false) {
   return [...ui.media,...builtinMedia].map((image,index)=>`<button class="media-tile" ${picker?`data-media-index="${index}"`:`data-media-preview="${index}"`} aria-label="${picker?'Escolher':'Ver'} ${e(image.name)}"><img src="${e(imageUrl(image.url))}" alt="${e(image.alt||image.name)}" loading="lazy" width="250" height="250"><span>${e(image.name)}</span></button>`).join('');
 }
 function renderMedia() { main.innerHTML=title('Imagens','As fotografias que dão vida ao teu estúdio.','<label class="primary file-label">+ Carregar imagem<input type="file" data-upload accept="image/jpeg,image/png,image/webp,image/avif" hidden></label>')+`<p class="form-hint">JPEG, PNG, WebP ou AVIF, até 5 MB. As imagens da biblioteca destinam-se à publicação na loja.</p><section class="media-grid">${libraryTiles()}</section>`; }
-function renderSettings() { main.innerHTML=title('A tua conta','Um espaço só teu, ligado à Avoya Studio.')+`<section class="form-card"><div class="settings-row"><div><strong>Simone Martins</strong><small>Administradora do estúdio</small></div><span>Conta autorizada</span></div><div class="settings-row"><div><strong>Email de acesso</strong><small>O link de início de sessão chega a este endereço.</small></div><span>${e(user?.email)}</span></div><div class="settings-row"><div><strong>Acesso seguro</strong><small>Verificação Cloudflare Turnstile e link pessoal por email.</small></div><span>Ativo</span></div><div class="settings-row"><div><strong>A tua loja</strong><small>Abre a loja para confirmar as alterações.</small></div><a class="secondary" href="index.html" target="_blank" rel="noopener">Abrir ↗</a></div><div class="settings-row"><div><strong>Terminar sessão</strong><small>Recomendado ao usar um dispositivo partilhado.</small></div><button class="secondary" data-logout>Sair</button></div></section>`; }
+function renderOrders() {
+  const states={pending:'A aguardar pagamento',payment_processing:'Em processamento',confirmed:'Confirmada',preparing:'Em preparação',shipped:'Enviada',delivered:'Entregue',cancelled:'Cancelada'};
+  const payments={unpaid:'Por pagar',processing:'Em processamento',paid:'Pago',failed:'Falhou',partially_refunded:'Parcialmente reembolsado',refunded:'Reembolsado'};
+  main.innerHTML=title('Encomendas','As últimas encomendas do estúdio. Os pagamentos são confirmados pela Stripe.')+(ui.orders.length?`<div class="admin-order-list">${ui.orders.map(order=>`<article class="form-card"><div class="panel-heading"><h2>${e(order.order_number)}</h2><strong>${currency(order.total_cents/100)}</strong></div><p>${e(order.customer_email)} · ${new Date(order.created_at).toLocaleDateString('pt-PT')}</p><p>${e(states[order.status]||order.status)} · ${e(payments[order.payment_status]||order.payment_status)}</p>${order.is_test?'<p class="admin-test-label">TESTE · SEM COBRANÇA REAL</p>':''}<div class="admin-order-items">${order.items.map(item=>`<p>${Number(item.quantity)} × ${e(item.name)}</p>`).join('')}</div></article>`).join('')}</div>`:'<div class="admin-empty"><h2>A primeira encomenda ainda está por chegar.</h2><p>Quando houver compras, ficam visíveis aqui. As encomendas de teste serão identificadas.</p></div>');
+}
+function renderSettings() { main.innerHTML=title('A tua conta','Um espaço só teu, ligado à Avoya Studio.')+`<section class="form-card"><div class="settings-row"><div><strong>Simone Martins</strong><small>Administradora do estúdio</small></div><span>Conta autorizada</span></div><div class="settings-row"><div><strong>Email de acesso</strong><small>Usa este endereço e a tua palavra-passe para entrar.</small></div><span>${e(user?.email)}</span></div><div class="settings-row"><div><strong>Acesso seguro</strong><small>Palavra-passe pessoal e verificação Cloudflare Turnstile.</small></div><span>Ativo</span></div><div class="settings-row"><div><strong>Palavra-passe</strong><small>Define ou atualiza a palavra-passe da tua conta.</small></div><a class="secondary" href="conta.html#seguranca">Gerir segurança ↗</a></div><div class="settings-row"><div><strong>A tua loja</strong><small>Abre a loja para confirmar as alterações.</small></div><a class="secondary" href="index.html" target="_blank" rel="noopener">Abrir ↗</a></div><div class="settings-row"><div><strong>Terminar sessão</strong><small>Recomendado ao usar um dispositivo partilhado.</small></div><button class="secondary" data-logout>Sair</button></div></section>`; }
 function render() {
   document.querySelectorAll('[data-view]').forEach(button=>{button.classList.toggle('active',button.dataset.view===ui.view);if(button.dataset.view===ui.view)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');});
   document.querySelector('#breadcrumb-current').textContent=views.find(([id])=>id===ui.view)?.[1]||'';
-  ({overview:renderOverview,products:renderProducts,content:renderContent,media:renderMedia,settings:renderSettings}[ui.view]||renderOverview)();
+  ({overview:renderOverview,products:renderProducts,orders:renderOrders,content:renderContent,media:renderMedia,settings:renderSettings}[ui.view]||renderOverview)();
 }
 async function refresh() {
-  const [catalogue,content,media]=await Promise.all([client.from('products').select('*').order('sort_order').order('created_at'),client.from('site_content').select('*').eq('id','site').single(),client.from('media').select('*').order('created_at',{ascending:false})]);
-  const error=catalogue.error||content.error||media.error;if(error)throw error;
-  ui.products=catalogue.data;ui.media=media.data;ui.content={...defaultContent,...content.data.data};ui.contentVersion=content.data.updated_at;
+  const [catalogue,content,media,orders]=await Promise.all([client.from('products').select('*').order('sort_order').order('created_at'),client.from('site_content').select('*').eq('id','site').single(),client.from('media').select('*').order('created_at',{ascending:false}),client.from('orders').select('order_number,customer_email,status,payment_status,total_cents,items,is_test,created_at').order('created_at',{ascending:false}).limit(50)]);
+  const error=catalogue.error||content.error||media.error||orders.error;if(error)throw error;
+  ui.products=catalogue.data;ui.media=media.data;ui.orders=orders.data;ui.content={...defaultContent,...content.data.data};ui.contentVersion=content.data.updated_at;
 }
 async function authorize() {
   if(refreshing)return;refreshing=true;
@@ -149,7 +155,7 @@ async function upload(file) {
     toast('Imagem carregada. Já podes escolhê-la para a loja.');
   }catch(error){toast(errorMessage(error));}
 }
-async function logout() {if(!await discardCheck())return;ui.dirty=false;await client.auth.signOut();user=null;productDialog.close();mediaDialog.close();showLogin();if(widgetId===undefined)await initCaptcha();else window.turnstile?.reset(widgetId);loginStatus.textContent='Sessão terminada. Podes voltar a entrar por email.';}
+async function logout() {if(!await discardCheck())return;ui.dirty=false;await client.auth.signOut();user=null;productDialog.close();mediaDialog.close();showLogin();if(widgetId===undefined)await initCaptcha();else window.turnstile?.reset(widgetId);loginStatus.textContent='Sessão terminada. Podes voltar a entrar com a tua palavra-passe.';}
 document.querySelectorAll('#desktop-nav,#mobile-nav').forEach(nav=>nav.innerHTML=views.map(([id,label])=>`<button class="nav-item" data-view="${id}">${svg(id)}<span>${label}</span></button>`).join(''));
 document.addEventListener('click',async event=>{
   const target=event.target.closest('button,[data-view]');if(!target)return;
@@ -182,18 +188,17 @@ window.addEventListener('beforeunload',event=>{if(ui.dirty){event.preventDefault
 async function initCaptcha() {
   if(!config.turnstileSiteKey){loginStatus.textContent='A configuração de segurança ainda está a ser concluída.';return;}
   const script=document.createElement('script');script.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';script.async=true;script.defer=true;
-  script.onload=()=>{widgetId=window.turnstile.render('#turnstile',{sitekey:config.turnstileSiteKey,theme:'light','size':'flexible',callback:token=>{captchaToken=token;loginButton.disabled=false;if(!loginAttempted)loginStatus.textContent=expiredEmailLink?'Este link já foi usado ou expirou. Pede um novo link para entrar.':'Enviamos um link pessoal para o teu email. Não precisas de palavra-passe.';},'expired-callback':()=>{captchaToken='';loginButton.disabled=true;},'error-callback':()=>{captchaToken='';loginButton.disabled=true;loginStatus.textContent='Não foi possível verificar o acesso. Atualiza a página para tentar novamente.';}});};
+  script.onload=()=>{widgetId=window.turnstile.render('#turnstile',{sitekey:config.turnstileSiteKey,theme:'light','size':'flexible',callback:token=>{captchaToken=token;loginButton.disabled=false;if(!loginAttempted)loginStatus.textContent='Entra com o email e a palavra-passe da tua conta.';},'expired-callback':()=>{captchaToken='';loginButton.disabled=true;},'error-callback':()=>{captchaToken='';loginButton.disabled=true;loginStatus.textContent='Não foi possível verificar o acesso. Atualiza a página para tentar novamente.';}});};
   script.onerror=()=>{loginStatus.textContent='A verificação de segurança não carregou. Verifica a ligação e atualiza a página.';};document.head.append(script);
 }
 document.querySelector('#login-form').addEventListener('submit',async event=>{
-  event.preventDefault();if(!client||!captchaToken)return;loginAttempted=true;loginButton.disabled=true;loginStatus.textContent='A enviar o teu link de acesso…';
+  event.preventDefault();if(!client||!captchaToken)return;loginAttempted=true;loginButton.disabled=true;loginStatus.textContent='A entrar no teu estúdio…';
   const email=document.querySelector('#login-email').value.trim().toLowerCase();
   try {
-    const {error}=await client.auth.signInWithOtp({email,options:{shouldCreateUser:false,emailRedirectTo:`${location.origin}/admin.html`,captchaToken}});
-    if(error)throw error;loginStatus.textContent='Se o email estiver autorizado, receberás um link de acesso. Abre-o neste dispositivo para continuar.';
+    const {error}=await client.auth.signInWithPassword({email,password:document.querySelector('#login-password').value,options:{captchaToken}});
+    if(error)throw error;document.querySelector('#login-password').value='';await authorize();
   }catch(error){
-    const messages={over_email_send_rate_limit:'O serviço de email atingiu o limite temporário de envios. Tenta mais tarde.',over_request_rate_limit:'Aguarda um pouco antes de pedir outro link.',captcha_failed:'A verificação de segurança expirou. Aguarda a nova verificação e tenta novamente.',email_address_not_authorized:'O envio para este endereço ainda não está configurado. Contacta o responsável pela loja.',unexpected_failure:'O serviço de email não conseguiu enviar o link. Tenta novamente mais tarde.'};
-    loginStatus.textContent=messages[error?.code]||(error?.status===429?'Aguarda um pouco antes de pedir outro link.':'Não foi possível enviar o link. Confirma o email e tenta novamente.');
+    loginStatus.textContent=authError(error);
   }
   finally{captchaToken='';if(widgetId!==undefined)window.turnstile?.reset(widgetId);}
 });

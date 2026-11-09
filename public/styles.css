@@ -12,3 +12,5 @@ dialog{padding:0;border:0;color:var(--ink);background:var(--paper);max-height:90
 
 @media(max-width:760px){.story-top h1{font-size:clamp(36px,8.4vw,60px)}}
 .catalogue-empty{grid-column:1/-1;padding:55px 0;font-size:13px;color:var(--muted);line-height:1.9}
+
+@media(max-width:700px){.header-actions{gap:6px}.header-actions .icon-button{min-width:32px;padding:5px}.header-actions .bag-button{gap:3px}.header{grid-template-columns:34px minmax(88px,1fr) auto}.header .logo{width:112px}}

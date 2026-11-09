@@ -10,7 +10,7 @@ await mkdir(output, { recursive: true });
 await cp('public', 'dist', { recursive: true });
 await mkdir('dist/vendor', { recursive: true });
 await build({ stdin: { contents: "export { createClient } from '@supabase/supabase-js';", resolveDir: projectRoot }, bundle: true, format: 'esm', platform: 'browser', target: ['es2022'], minify: true, outfile: 'dist/vendor/supabase.js', legalComments: 'none' });
-const required = ['index.html', 'simone.html', 'cuidados.html', 'admin.html', 'admin.js', 'admin.css', 'vendor/supabase.js', 'assets/hero.webp', 'assets/amber.webp', 'assets/atelier.webp', 'assets/raiz.webp', 'assets/mare.webp', 'assets/matcha.webp', 'assets/logo.svg', 'assets/favicon.svg', 'app.js', 'styles.css'];
+const required = ['index.html', 'simone.html', 'cuidados.html', 'admin.html', 'admin.js', 'admin.css', 'conta.html', 'account.js', 'account.css', 'auth.mjs', 'checkout.html', 'checkout.js', 'privacidade.html', 'vendor/supabase.js', 'assets/hero.webp', 'assets/amber.webp', 'assets/atelier.webp', 'assets/raiz.webp', 'assets/mare.webp', 'assets/matcha.webp', 'assets/logo.svg', 'assets/favicon.svg', 'app.js', 'styles.css'];
 for (const path of required) await readFile(`dist/${path}`);
 const items = await readdir('dist');
 await writeFile('dist/health', 'ok\n');

@@ -1,6 +1,6 @@
 # Administração Avoya Studio
 
-Painel em `/admin.html`. O email autorizado é `contact@avoyastudio.com`. O acesso usa links de email do Supabase Auth e Cloudflare Turnstile, validado pelo Supabase. Não há palavra-passe de administração gravada no repositório.
+Painel em `/admin.html`. O email autorizado é `contact@avoyastudio.com`. O acesso usa email e palavra-passe através do Supabase Auth, com Cloudflare Turnstile validado pelo Supabase. Não há palavra-passe de administração gravada no repositório.
 
 ## Conteúdos
 
@@ -18,11 +18,11 @@ O projeto dedicado Supabase é `apxlqpcmyvznmejokfdj`, organização Avoya Studi
 
 RLS está ativa em `products`, `site_content`, `media` e `admin_users`. A lista de administradores não pode ser alterada através da API pública. Apenas o email autenticado que corresponde a essa lista pode editar. A loja lê apenas produtos publicados. A decisão de autorização é aplicada na base de dados, independentemente da interface.
 
-## Envio dos links de acesso
+## Palavra-passe e emails de confirmação
 
-O fornecedor de email padrão do Supabase limita os envios a dois por hora. O painel preserva a mensagem de falha mesmo quando o Turnstile se renova, para não apresentar um pedido recusado como enviado. A configuração de SMTP da Hostinger usa `smtp.hostinger.com`, porta 465, remetente Avoya Studio e utilizador `contact@avoyastudio.com`. A palavra-passe da caixa fica apenas no Supabase, introduzida pelo titular. Não consta do repositório nem das variáveis do frontend.
+O fornecedor de email padrão do Supabase limita os envios a dois por hora. O login habitual usa palavra-passe e não envia um link. A confirmação de novas contas e a recuperação de palavra-passe continuam a necessitar de envio de email. A configuração de SMTP da Hostinger usa `smtp.hostinger.com`, porta 465, remetente Avoya Studio e utilizador `contact@avoyastudio.com`. A palavra-passe da caixa fica apenas no Supabase, introduzida pelo titular. Não consta do repositório nem das variáveis do frontend.
 
-Os links só podem ser usados uma vez. Um link já utilizado ou expirado exige um novo pedido.
+Os links de confirmação e recuperação só podem ser usados uma vez. A palavra-passe é definida diretamente pela titular e nunca guardada no repositório. Uma sessão já autenticada pode aceder a `conta.html#seguranca` para definir a primeira palavra-passe.
 
 ## Verificações
 
@@ -31,3 +31,7 @@ Os links só podem ser usados uma vez. Um link já utilizado ou expirado exige u
 `node scripts/verify-public-api.mjs`: leitura pública, ocultação de rascunhos, bloqueio de escrita não autenticada, proteção da lista de administradores e recusa de login sem CAPTCHA.
 
 O build agora exige `npm ci && npm run build`, para empacotar o SDK localmente sem depender de um CDN de JavaScript. Os cabeçalhos no Render devem corresponder a `render.yaml`.
+
+## Encomendas
+
+O painel mostra as últimas 50 encomendas, identificando as de teste. A cliente consulta apenas as suas na área pessoal. O estado de pagamento é atualizado pelo webhook verificado da Stripe; o painel não permite marcar um pagamento como concluído manualmente.
