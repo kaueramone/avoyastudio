@@ -16,7 +16,7 @@ const views = [['overview','Visão geral'],['products','Produtos'],['content','C
 const labels = { published:'Publicado', draft:'Rascunho', archived:'Arquivado' };
 const builtinMedia = ['hero','matcha','amber','raiz','mare','atelier'].map(name=>({url:`assets/${name}.webp`,name:({hero:'Imagem principal',matcha:'Jardim de Lisboa',amber:'Sol de Marrakech',raiz:'Raiz',mare:'Maré Serena',atelier:'O atelier'})[name]}));
 const ui = { view:'overview', filter:'all', search:'', contentTab:'home', products:[], media:[], content:{...defaultContent}, contentVersion:null, productVersion:null, pickerTarget:null, dirty:false, formBaseline:'', pendingClose:null };
-let config, client, user, toastTimer, captchaToken='', widgetId, refreshing=false;
+let config, client, user, toastTimer, captchaToken='', widgetId, refreshing=false, loginAttempted=false;
 const expiredEmailLink = new URLSearchParams(location.hash.slice(1)).get('error_code') === 'otp_expired';
 const main = document.querySelector('#admin-main');
 const productDialog = document.querySelector('#editor-dialog');
@@ -182,16 +182,19 @@ window.addEventListener('beforeunload',event=>{if(ui.dirty){event.preventDefault
 async function initCaptcha() {
   if(!config.turnstileSiteKey){loginStatus.textContent='A configuração de segurança ainda está a ser concluída.';return;}
   const script=document.createElement('script');script.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';script.async=true;script.defer=true;
-  script.onload=()=>{widgetId=window.turnstile.render('#turnstile',{sitekey:config.turnstileSiteKey,theme:'light','size':'flexible',callback:token=>{captchaToken=token;loginButton.disabled=false;loginStatus.textContent=expiredEmailLink?'Este link já foi usado ou expirou. Pede um novo link para entrar.':'Enviamos um link pessoal para o teu email. Não precisas de palavra-passe.';},'expired-callback':()=>{captchaToken='';loginButton.disabled=true;},'error-callback':()=>{captchaToken='';loginButton.disabled=true;loginStatus.textContent='Não foi possível verificar o acesso. Atualiza a página para tentar novamente.';}});};
+  script.onload=()=>{widgetId=window.turnstile.render('#turnstile',{sitekey:config.turnstileSiteKey,theme:'light','size':'flexible',callback:token=>{captchaToken=token;loginButton.disabled=false;if(!loginAttempted)loginStatus.textContent=expiredEmailLink?'Este link já foi usado ou expirou. Pede um novo link para entrar.':'Enviamos um link pessoal para o teu email. Não precisas de palavra-passe.';},'expired-callback':()=>{captchaToken='';loginButton.disabled=true;},'error-callback':()=>{captchaToken='';loginButton.disabled=true;loginStatus.textContent='Não foi possível verificar o acesso. Atualiza a página para tentar novamente.';}});};
   script.onerror=()=>{loginStatus.textContent='A verificação de segurança não carregou. Verifica a ligação e atualiza a página.';};document.head.append(script);
 }
 document.querySelector('#login-form').addEventListener('submit',async event=>{
-  event.preventDefault();if(!client||!captchaToken)return;loginButton.disabled=true;
+  event.preventDefault();if(!client||!captchaToken)return;loginAttempted=true;loginButton.disabled=true;loginStatus.textContent='A enviar o teu link de acesso…';
   const email=document.querySelector('#login-email').value.trim().toLowerCase();
   try {
     const {error}=await client.auth.signInWithOtp({email,options:{shouldCreateUser:false,emailRedirectTo:`${location.origin}/admin.html`,captchaToken}});
     if(error)throw error;loginStatus.textContent='Se o email estiver autorizado, receberás um link de acesso. Abre-o neste dispositivo para continuar.';
-  }catch(error){loginStatus.textContent=error?.message?.includes('rate')?'Aguarda um pouco antes de pedir outro link.':'Não foi possível enviar o link. Confirma o email e tenta novamente.';}
+  }catch(error){
+    const messages={over_email_send_rate_limit:'O serviço de email atingiu o limite temporário de envios. Tenta mais tarde.',over_request_rate_limit:'Aguarda um pouco antes de pedir outro link.',captcha_failed:'A verificação de segurança expirou. Aguarda a nova verificação e tenta novamente.',email_address_not_authorized:'O envio para este endereço ainda não está configurado. Contacta o responsável pela loja.',unexpected_failure:'O serviço de email não conseguiu enviar o link. Tenta novamente mais tarde.'};
+    loginStatus.textContent=messages[error?.code]||(error?.status===429?'Aguarda um pouco antes de pedir outro link.':'Não foi possível enviar o link. Confirma o email e tenta novamente.');
+  }
   finally{captchaToken='';if(widgetId!==undefined)window.turnstile?.reset(widgetId);}
 });
 try {
