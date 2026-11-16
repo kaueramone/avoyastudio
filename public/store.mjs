@@ -29,7 +29,7 @@ export async function loadStore() {
 }
 function setText(selector, text) {
   const target = document.querySelector(selector); if (!target || typeof text !== 'string') return;
-  target.replaceChildren(...text.split('\n').flatMap((line, i) => i ? [document.createElement('br'), document.createTextNode(line)] : [document.createTextNode(line)]));
+  target.replaceChildren(...text.split('\n').flatMap((line, i) => i ? [document.createTextNode(' '), document.createElement('br'), document.createTextNode(line)] : [document.createTextNode(line)]));
 }
 export function applyContent(content, config = {}) {
   content={...content,...Object.fromEntries(Object.entries(content.translations?.[language]||{}).filter(([key,value])=>typeof value==='string'&&!['heroImage','originImage','storyImage'].includes(key)))};
